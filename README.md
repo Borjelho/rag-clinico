@@ -16,7 +16,7 @@ Acervo clínico → Ingestão → Persistência local (SQLite)
 
 | Camada             | Tecnologia                                                 |
 | ------------------ | ---------------------------------------------------------- |
-| Linguagem          | Python 3.11+                                               |
+| Linguagem          | Python 3.12                                                |
 | Leitura de PDF     | pypdf / pdfplumber                                         |
 | Persistência local | SQLite                                                     |
 | Chunking           | LangChain Text Splitters (recursivo, semântico)            |
@@ -65,16 +65,19 @@ rag-clinico/
 ├── .env.example
 ├── .gitignore
 ├── README.md
-└── requirements.txt
+├── pyproject.toml
+└── uv.lock
 ```
 
 ## Setup
 
 ### Pré-requisitos
 
-- Python 3.11 ou superior
+- [uv](https://docs.astral.sh/uv/) instalado ([instruções de instalação](https://docs.astral.sh/uv/getting-started/installation/))
 - [Ollama](https://ollama.com) instalado e rodando localmente
 - Git
+
+> Não precisa ter Python pré-instalado — o `uv` gerencia a versão do Python automaticamente a partir do `.python-version` do projeto.
 
 ### 1. Clonar o repositório
 
@@ -83,28 +86,25 @@ git clone https://github.com/Borjelho/rag-clinico.git
 cd rag-clinico
 ```
 
-### 2. Criar e ativar o ambiente virtual
+### 2. Instalar as dependências
 
 ```bash
-python -m venv venv
-
-# Linux/Mac
-source venv/bin/activate
-
-# Windows
-venv\Scripts\activate
+uv sync
 ```
 
-### 3. Instalar as dependências
+Isso cria o ambiente virtual (`.venv/`) automaticamente e instala todas as dependências com as versões exatas travadas no `uv.lock` — não é necessário criar/ativar venv manualmente.
+
+### 3. Configurar identidade do Git (uma vez por pessoa)
 
 ```bash
-pip install -r requirements.txt
+git config user.name "Nome Sobrenome"
+git config user.email "email@dominio.com"
 ```
 
 ### 4. Baixar o modelo LLM local via Ollama
 
 ```bash
-ollama pull <A decidir>
+ollama pull <TBD>
 ```
 
 ### 5. Configurar variáveis de ambiente
@@ -117,29 +117,44 @@ cp .env.example .env
 ### 6. Rodar a ingestão do acervo
 
 ```bash
-python src/ingest.py
+uv run src/ingest.py
 ```
 
 ### 7. Gerar embeddings e popular a base vetorial
 
 ```bash
-python src/embeddings.py
+uv run src/embeddings.py
 ```
 
 ### 8. Rodar a interface
 
 ```bash
-streamlit run src/app.py
+uv run streamlit run src/app.py
 ```
 
 A aplicação estará disponível em `http://localhost:8501`.
+
+### Adicionando novas dependências
+
+Combine com a squad antes de rodar isso — só quem está mexendo em dependências deve atualizar o lockfile, pra evitar conflito de merge:
+
+```bash
+uv add <nome-do-pacote>
+```
+
+Depois de qualquer atualização de dependências, os demais integrantes devem rodar:
+
+```bash
+git pull
+uv sync
+```
 
 ## Avaliação
 
 Para rodar a avaliação de fidelidade e relevância sobre o conjunto de teste:
 
 ```bash
-python eval/evaluate.py
+uv run eval/evaluate.py
 ```
 
 Os resultados são registrados em `eval/results.md`, incluindo:
