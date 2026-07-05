@@ -10,11 +10,20 @@ from typing import Iterable
 
 import pdfplumber
 
+from storage import (
+    DB_PATH,
+    count_sources,
+    finish_run,
+    insert_csv_row,
+    insert_pdf_page,
+    insert_source,
+    reset_database,
+    start_run,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = PROJECT_ROOT / "data" / "raw" / "prontuario_sinteticos"
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-DB_PATH = PROCESSED_DIR / "documents.db"
 
 
 def utc_now() -> str:
@@ -42,111 +51,6 @@ def normalize_text(text: str | None) -> str:
 
 def relative_path(path: Path) -> str:
     return path.relative_to(PROJECT_ROOT).as_posix()
-
-
-def create_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        PRAGMA foreign_keys = ON;
-
-        CREATE TABLE ingestion_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            started_at TEXT NOT NULL,
-            finished_at TEXT,
-            status TEXT NOT NULL,
-            message TEXT,
-            sources_count INTEGER NOT NULL DEFAULT 0,
-            pdf_pages_count INTEGER NOT NULL DEFAULT 0,
-            csv_rows_count INTEGER NOT NULL DEFAULT 0
-        );
-
-        CREATE TABLE sources (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT NOT NULL UNIQUE,
-            name TEXT NOT NULL,
-            source_type TEXT NOT NULL,
-            category TEXT NOT NULL,
-            content_sha256 TEXT NOT NULL,
-            size_bytes INTEGER NOT NULL,
-            ingested_at TEXT NOT NULL
-        );
-
-        CREATE TABLE pdf_pages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_id INTEGER NOT NULL,
-            page_number INTEGER NOT NULL,
-            text TEXT NOT NULL,
-            text_sha256 TEXT NOT NULL,
-            FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
-            UNIQUE (source_id, page_number)
-        );
-
-        CREATE TABLE csv_rows (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_id INTEGER NOT NULL,
-            table_name TEXT NOT NULL,
-            row_number INTEGER NOT NULL,
-            patient_id TEXT,
-            content_json TEXT NOT NULL,
-            content_text TEXT NOT NULL,
-            content_sha256 TEXT NOT NULL,
-            FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
-            UNIQUE (source_id, row_number)
-        );
-
-        CREATE INDEX idx_pdf_pages_source_page ON pdf_pages(source_id, page_number);
-        CREATE INDEX idx_csv_rows_table ON csv_rows(table_name);
-        CREATE INDEX idx_csv_rows_patient ON csv_rows(patient_id);
-        """
-    )
-
-
-def reset_database(db_path: Path) -> sqlite3.Connection:
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    if db_path.exists():
-        db_path.unlink()
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    create_schema(conn)
-    return conn
-
-
-def start_run(conn: sqlite3.Connection) -> int:
-    cursor = conn.execute(
-        "INSERT INTO ingestion_runs (started_at, status) VALUES (?, ?)",
-        (utc_now(), "running"),
-    )
-    if cursor.lastrowid is None:
-        raise RuntimeError("INSERT em ingestion_runs não retornou lastrowid")
-    return cursor.lastrowid
-
-
-def finish_run(
-    conn: sqlite3.Connection,
-    run_id: int,
-    status: str,
-    message: str,
-    sources_count: int = 0,
-    pdf_pages_count: int = 0,
-    csv_rows_count: int = 0,
-) -> None:
-    conn.execute(
-        """
-        UPDATE ingestion_runs
-        SET finished_at = ?, status = ?, message = ?, sources_count = ?,
-            pdf_pages_count = ?, csv_rows_count = ?
-        WHERE id = ?
-        """,
-        (
-            utc_now(),
-            status,
-            message,
-            sources_count,
-            pdf_pages_count,
-            csv_rows_count,
-            run_id,
-        ),
-    )
 
 
 def discover_pdfs() -> list[Path]:
@@ -179,26 +83,16 @@ def register_source(
     source_type: str,
     category: str,
 ) -> int:
-    cursor = conn.execute(
-        """
-        INSERT INTO sources (
-            path, name, source_type, category, content_sha256, size_bytes, ingested_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            relative_path(path),
-            path.name,
-            source_type,
-            category,
-            file_sha256(path),
-            path.stat().st_size,
-            utc_now(),
-        ),
+    return insert_source(
+        conn,
+        path=relative_path(path),
+        name=path.name,
+        source_type=source_type,
+        category=category,
+        content_sha256=file_sha256(path),
+        size_bytes=path.stat().st_size,
+        ingested_at=utc_now(),
     )
-    if cursor.lastrowid is None:
-        raise RuntimeError("INSERT em sources não retornou lastrowid")
-    return cursor.lastrowid
 
 
 def ingest_pdf(conn: sqlite3.Connection, path: Path) -> int:
@@ -208,12 +102,12 @@ def ingest_pdf(conn: sqlite3.Connection, path: Path) -> int:
     with pdfplumber.open(path) as pdf:
         for page_number, page in enumerate(pdf.pages, start=1):
             text = normalize_text(page.extract_text())
-            conn.execute(
-                """
-                INSERT INTO pdf_pages (source_id, page_number, text, text_sha256)
-                VALUES (?, ?, ?, ?)
-                """,
-                (source_id, page_number, text, text_sha256(text)),
+            insert_pdf_page(
+                conn,
+                source_id=source_id,
+                page_number=page_number,
+                text=text,
+                text_sha256=text_sha256(text),
             )
             pages_count += 1
 
@@ -324,31 +218,19 @@ def ingest_csv(conn: sqlite3.Connection, path: Path) -> int:
                 separators=(",", ":"),
             )
             content_text = csv_row_to_text(table_name, normalized_row)
-            conn.execute(
-                """
-                INSERT INTO csv_rows (
-                    source_id, table_name, row_number, patient_id, content_json,
-                    content_text, content_sha256
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    source_id,
-                    table_name,
-                    row_number,
-                    patient_id,
-                    content_json,
-                    content_text,
-                    text_sha256(content_json),
-                ),
+            insert_csv_row(
+                conn,
+                source_id=source_id,
+                table_name=table_name,
+                row_number=row_number,
+                patient_id=patient_id,
+                content_json=content_json,
+                content_text=content_text,
+                content_sha256=text_sha256(content_json),
             )
             rows_count += 1
 
     return rows_count
-
-
-def count_sources(conn: sqlite3.Connection) -> int:
-    return int(conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0])
 
 
 def ingest_all(conn: sqlite3.Connection) -> tuple[int, int, int]:
@@ -377,14 +259,15 @@ def print_summary(
 
 
 def main() -> int:
-    conn = reset_database(DB_PATH)
-    run_id = start_run(conn)
+    conn = reset_database()
+    run_id = start_run(conn, utc_now())
 
     try:
         sources_count, pdf_pages_count, csv_rows_count = ingest_all(conn)
         finish_run(
             conn,
             run_id,
+            utc_now(),
             "success",
             "Ingestao concluida com sucesso.",
             sources_count,
@@ -395,7 +278,7 @@ def main() -> int:
         print_summary(sources_count, pdf_pages_count, csv_rows_count)
         return 0
     except Exception as exc:
-        finish_run(conn, run_id, "failed", str(exc))
+        finish_run(conn, run_id, utc_now(), "failed", str(exc))
         conn.commit()
         raise
     finally:
