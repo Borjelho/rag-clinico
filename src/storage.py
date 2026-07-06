@@ -64,6 +64,55 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_csv_rows_patient ON csv_rows(patient_id);
         """
     )
+    create_chunks_schema(conn)
+
+
+def connect_database(db_path: Path = DB_PATH) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def create_chunks_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER NOT NULL,
+            source_type TEXT NOT NULL,
+            category TEXT NOT NULL,
+            document_name TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            content_sha256 TEXT NOT NULL,
+            page_start INTEGER,
+            page_end INTEGER,
+            table_name TEXT,
+            patient_id TEXT,
+            patient_name TEXT,
+            row_start INTEGER,
+            row_end INTEGER,
+            row_numbers_json TEXT,
+            metadata_json TEXT NOT NULL,
+            FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
+            UNIQUE (source_id, chunk_index)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_id);
+        CREATE INDEX IF NOT EXISTS idx_chunks_category ON chunks(category);
+        CREATE INDEX IF NOT EXISTS idx_chunks_patient ON chunks(patient_id);
+        CREATE INDEX IF NOT EXISTS idx_chunks_table ON chunks(table_name);
+        """
+    )
+    chunk_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(chunks)").fetchall()
+    }
+    if "patient_name" not in chunk_columns:
+        conn.execute("ALTER TABLE chunks ADD COLUMN patient_name TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chunks_patient_name ON chunks(patient_name)"
+    )
 
 
 def reset_database(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -191,3 +240,61 @@ def insert_csv_row(
 
 def count_sources(conn: sqlite3.Connection) -> int:
     return int(conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0])
+
+
+def clear_chunks(conn: sqlite3.Connection) -> None:
+    conn.execute("DELETE FROM chunks")
+
+
+def insert_chunk(
+    conn: sqlite3.Connection,
+    source_id: int,
+    source_type: str,
+    category: str,
+    document_name: str,
+    chunk_index: int,
+    content: str,
+    content_sha256: str,
+    metadata_json: str,
+    page_start: int | None = None,
+    page_end: int | None = None,
+    table_name: str | None = None,
+    patient_id: str | None = None,
+    patient_name: str | None = None,
+    row_start: int | None = None,
+    row_end: int | None = None,
+    row_numbers_json: str | None = None,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO chunks (
+            source_id, source_type, category, document_name, chunk_index,
+            content, content_sha256, page_start, page_end, table_name,
+            patient_id, patient_name, row_start, row_end, row_numbers_json,
+            metadata_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            source_id,
+            source_type,
+            category,
+            document_name,
+            chunk_index,
+            content,
+            content_sha256,
+            page_start,
+            page_end,
+            table_name,
+            patient_id,
+            patient_name,
+            row_start,
+            row_end,
+            row_numbers_json,
+            metadata_json,
+        ),
+    )
+
+
+def count_chunks(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
