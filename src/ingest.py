@@ -133,13 +133,22 @@ def patient_id_for_row(table_name: str, row: dict[str, str]) -> str:
     return first_present(row, ["PATIENT", "patient", "patient_id", "Id", "ID"])
 
 
-def patient_row_to_text(row: dict[str, str]) -> str:
-    patient_id = patient_id_for_row("patients", row)
-    name = " ".join(
-        part
-        for part in [row.get("PREFIX", ""), row.get("FIRST", ""), row.get("LAST", "")]
+def patient_name_for_row(row: dict[str, str]) -> str:
+    return " ".join(
+        part.strip()
+        for part in [
+            row.get("PREFIX", ""),
+            row.get("FIRST", ""),
+            row.get("LAST", ""),
+            row.get("SUFFIX", ""),
+        ]
         if part.strip()
     )
+
+
+def patient_row_to_text(row: dict[str, str]) -> str:
+    patient_id = patient_id_for_row("patients", row)
+    name = patient_name_for_row(row)
     return (
         f"Paciente {patient_id}. Nome: {value_or_missing(name)}. "
         f"Nascimento: {value_or_missing(row.get('BIRTHDATE'))}. "
@@ -218,12 +227,16 @@ def ingest_csv(conn: sqlite3.Connection, path: Path) -> int:
                 separators=(",", ":"),
             )
             content_text = csv_row_to_text(table_name, normalized_row)
+            patient_name = None
+            if table_name == "patients":
+                patient_name = patient_name_for_row(normalized_row)
             insert_csv_row(
                 conn,
                 source_id=source_id,
                 table_name=table_name,
                 row_number=row_number,
                 patient_id=patient_id,
+                patient_name=patient_name,
                 content_json=content_json,
                 content_text=content_text,
                 content_sha256=text_sha256(content_json),
