@@ -42,8 +42,8 @@ rag-clinico/
 │
 ├── src/
 │   ├── __init__.py
-│   ├── ingest.py                # lê PDFs/CSV/FHIR, extrai texto, salva em data/processed
-│   ├── chunking.py              # estratégias de split
+│   ├── ingest.py                # lê PDFs/CSV, extrai texto, salva em SQLite
+│   ├── chunking.py              # gera chunks com metadados e salva no SQLite
 │   ├── embeddings.py             # gera vetores, popula o Chroma
 │   ├── rag_chain.py              # retriever + prompt + LLM (LCEL)
 │   ├── prompts.py                # templates de prompt
@@ -120,13 +120,21 @@ cp .env.example .env
 uv run src/ingest.py
 ```
 
-### 7. Gerar embeddings e popular a base vetorial
+### 7. Gerar chunks
+
+```bash
+uv run src/chunking.py
+```
+
+O chunking lê o banco `data/processed/documents.db`, quebra PDFs e CSVs em trechos menores e salva os chunks com metadados no próprio SQLite.
+
+### 8. Gerar embeddings e popular a base vetorial
 
 ```bash
 uv run src/embeddings.py
 ```
 
-### 8. Rodar a interface
+### 9. Rodar a interface
 
 ```bash
 uv run streamlit run src/app.py

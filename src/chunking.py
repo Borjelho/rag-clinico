@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -24,42 +22,20 @@ CSV_MAX_CHARS = 1800
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def text_sha256(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def compact_json(data: dict | list) -> str:
-    return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
 def next_chunk_index(counters: dict[int, int], source_id: int) -> int:
     chunk_index = counters[source_id]
     counters[source_id] += 1
     return chunk_index
 
 
-def build_metadata(**values: object) -> str:
-    return compact_json(
-        {key: value for key, value in values.items() if value is not None}
-    )
-
-
-def patient_name_from_json(content_json: str) -> str | None:
-    data = json.loads(content_json)
-    name_parts = [
-        data.get("PREFIX", ""),
-        data.get("FIRST", ""),
-        data.get("LAST", ""),
-        data.get("SUFFIX", ""),
-    ]
-    patient_name = " ".join(part.strip() for part in name_parts if part.strip())
-    return patient_name or None
+def build_metadata(**values: object) -> dict[str, object]:
+    return {key: value for key, value in values.items() if value is not None}
 
 
 def load_patient_names(conn: sqlite3.Connection) -> dict[str, str]:
     rows = conn.execute(
         """
-        SELECT patient_id, content_json
+        SELECT patient_id, patient_name
         FROM csv_rows
         WHERE table_name = 'patients'
         ORDER BY row_number
@@ -71,7 +47,7 @@ def load_patient_names(conn: sqlite3.Connection) -> dict[str, str]:
         patient_id = row["patient_id"]
         if not patient_id:
             continue
-        patient_name = patient_name_from_json(row["content_json"])
+        patient_name = row["patient_name"]
         if patient_name:
             patient_names[patient_id] = patient_name
 
@@ -135,15 +111,9 @@ def chunk_pdfs(conn: sqlite3.Connection, counters: dict[int, int]) -> int:
             insert_chunk(
                 conn,
                 source_id=row["source_id"],
-                source_type=row["source_type"],
-                category=row["category"],
-                document_name=row["document_name"],
                 chunk_index=next_chunk_index(counters, row["source_id"]),
                 content=content,
-                content_sha256=text_sha256(content),
-                page_start=row["page_number"],
-                page_end=row["page_number"],
-                metadata_json=metadata,
+                metadata=metadata,
             )
             chunks_count += 1
 
@@ -157,75 +127,6 @@ def csv_tables(conn: sqlite3.Connection) -> list[str]:
     return [row["table_name"] for row in rows]
 
 
-def chunk_patient_rows(
-    conn: sqlite3.Connection,
-    counters: dict[int, int],
-    patient_names: dict[str, str],
-) -> int:
-    rows = conn.execute(
-        """
-        SELECT
-            s.id AS source_id,
-            s.source_type,
-            s.category,
-            s.name AS document_name,
-            c.table_name,
-            c.row_number,
-            c.patient_id,
-            c.content_text
-        FROM csv_rows c
-        JOIN sources s ON s.id = c.source_id
-        WHERE c.table_name = 'patients'
-        ORDER BY c.row_number
-        """
-    ).fetchall()
-
-    chunks_count = 0
-
-    for row in rows:
-        patient_name = patient_names.get(row["patient_id"])
-        content = (
-            f"Fonte: {row['document_name']}\n"
-            f"Tabela: {row['table_name']}\n"
-            f"Linha: {row['row_number']}\n"
-            f"{patient_header(row['patient_id'], patient_name)}\n\n"
-            f"{row['content_text']}"
-        )
-        row_numbers = [row["row_number"]]
-        metadata = build_metadata(
-            source_id=row["source_id"],
-            source_type=row["source_type"],
-            category=row["category"],
-            document_name=row["document_name"],
-            table_name=row["table_name"],
-            patient_id=row["patient_id"],
-            patient_name=patient_name,
-            row_start=row["row_number"],
-            row_end=row["row_number"],
-            row_numbers=row_numbers,
-        )
-        insert_chunk(
-            conn,
-            source_id=row["source_id"],
-            source_type=row["source_type"],
-            category=row["category"],
-            document_name=row["document_name"],
-            chunk_index=next_chunk_index(counters, row["source_id"]),
-            content=content,
-            content_sha256=text_sha256(content),
-            table_name=row["table_name"],
-            patient_id=row["patient_id"],
-            patient_name=patient_name,
-            row_start=row["row_number"],
-            row_end=row["row_number"],
-            row_numbers_json=compact_json(row_numbers),
-            metadata_json=metadata,
-        )
-        chunks_count += 1
-
-    return chunks_count
-
-
 def grouped_csv_rows(conn: sqlite3.Connection, table_name: str) -> list[sqlite3.Row]:
     return conn.execute(
         """
@@ -237,11 +138,12 @@ def grouped_csv_rows(conn: sqlite3.Connection, table_name: str) -> list[sqlite3.
             c.table_name,
             c.row_number,
             c.patient_id,
+            c.patient_name,
             c.content_text
         FROM csv_rows c
         JOIN sources s ON s.id = c.source_id
         WHERE c.table_name = ?
-        ORDER BY c.patient_id IS NULL, c.patient_id, c.row_number
+        ORDER BY s.id, c.patient_id IS NULL, c.patient_id, c.row_number
         """,
         (table_name,),
     ).fetchall()
@@ -256,7 +158,7 @@ def chunk_grouped_csv(
 ) -> int:
     rows = grouped_csv_rows(conn, table_name)
     chunks_count = 0
-    current_key: str | None = None
+    current_key: tuple[int, str] | None = None
     current_rows: list[sqlite3.Row] = []
     current_lines: list[str] = []
 
@@ -271,7 +173,7 @@ def chunk_grouped_csv(
         row_start = min(row_numbers)
         row_end = max(row_numbers)
         patient_id = first["patient_id"]
-        patient_name = patient_names.get(patient_id)
+        patient_name = first["patient_name"] or patient_names.get(patient_id)
         body = "\n".join(current_lines)
         content = (
             f"Fonte: {first['document_name']}\n"
@@ -295,26 +197,19 @@ def chunk_grouped_csv(
         insert_chunk(
             conn,
             source_id=first["source_id"],
-            source_type=first["source_type"],
-            category=first["category"],
-            document_name=first["document_name"],
             chunk_index=next_chunk_index(counters, first["source_id"]),
             content=content,
-            content_sha256=text_sha256(content),
-            table_name=first["table_name"],
-            patient_id=patient_id,
-            patient_name=patient_name,
-            row_start=row_start,
-            row_end=row_end,
-            row_numbers_json=compact_json(row_numbers),
-            metadata_json=metadata,
+            metadata=metadata,
         )
         chunks_count += 1
         current_rows = []
         current_lines = []
 
     for row in rows:
-        group_key = row["patient_id"] or f"row:{row['row_number']}"
+        group_key = (
+            row["source_id"],
+            row["patient_id"] or f"row:{row['row_number']}",
+        )
         line = row["content_text"].strip()
         if not line:
             continue
@@ -342,10 +237,7 @@ def chunk_csvs(
 ) -> int:
     chunks_count = 0
     for table_name in csv_tables(conn):
-        if table_name == "patients":
-            chunks_count += chunk_patient_rows(conn, counters, patient_names)
-        else:
-            chunks_count += chunk_grouped_csv(conn, counters, patient_names, table_name)
+        chunks_count += chunk_grouped_csv(conn, counters, patient_names, table_name)
     return chunks_count
 
 
