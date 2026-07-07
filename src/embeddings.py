@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sqlite3
@@ -99,6 +100,15 @@ def index_chunks(vectorstore: Chroma, rows: list[sqlite3.Row]) -> int:
     return len(rows)
 
 
+def run_search(query: str, k: int = 4) -> None:
+    vectorstore = get_vectorstore()
+    results = vectorstore.similarity_search_with_score(query, k=k)
+    for position, (document, distance) in enumerate(results, start=1):
+        name = document.metadata.get("document_name", "desconhecido")
+        print(f"\n[{position}] distancia={distance:.4f} | {name}")
+        print(document.page_content[:300])
+
+
 def print_summary(indexed_count: int, model_name: str) -> None:
     print("Embeddings concluidos.")
     print(f"Chunks indexados: {indexed_count}")
@@ -107,7 +117,7 @@ def print_summary(indexed_count: int, model_name: str) -> None:
     print(f"Vectorstore em: {VECTORSTORE_DIR.relative_to(PROJECT_ROOT).as_posix()}/")
 
 
-def main() -> int:
+def run_indexing() -> None:
     if not DB_PATH.exists():
         raise FileNotFoundError(
             f"Banco nao encontrado em {DB_PATH}. Rode uv run src/ingest.py antes."
@@ -127,6 +137,21 @@ def main() -> int:
     vectorstore.reset_collection()
     indexed_count = index_chunks(vectorstore, rows)
     print_summary(indexed_count, embeddings.model_name)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Gera embeddings e popula o Chroma.")
+    parser.add_argument(
+        "--busca",
+        metavar="PERGUNTA",
+        help="nao reindexa; busca a pergunta na base vetorial existente",
+    )
+    args = parser.parse_args()
+
+    if args.busca:
+        run_search(args.busca)
+    else:
+        run_indexing()
     return 0
 
 
