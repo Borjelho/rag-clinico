@@ -1,0 +1,115 @@
+{
+  "descricao": "Conjunto de teste (gabarito) para avaliar a RAG clinica. Cada item traz a pergunta, a resposta esperada (referencia), o documento-fonte e o trecho de apoio. Usado por evaluate.py para medir fidelidade e relevancia, e por compare_chunking.py para comparar configuracoes de chunk.",
+  "versao": "1.0",
+  "total": 12,
+  "perguntas": [
+    {
+      "id": "Q01",
+      "categoria": "bula",
+      "pergunta": "Qual a concentracao do comprimido de clonazepam e sua via de administracao?",
+      "resposta_esperada": "O clonazepam se apresenta em comprimido de 2 mg, de uso oral, para uso adulto e pediatrico.",
+      "documento_fonte": "bula_clonazepam_profissional.pdf",
+      "trecho_fonte": "Comprimido de 2 mg. Embalagem contendo 20, 30, 40, 60*, 400*, 450* ou 500* unidades. USO ORAL. USO ADULTO E PEDIATRICO.",
+      "tipo": "factual_simples"
+    },
+    {
+      "id": "Q02",
+      "categoria": "bula",
+      "pergunta": "Em quais situacoes o clonazepam e contraindicado?",
+      "resposta_esperada": "O clonazepam e contraindicado em casos de hipersensibilidade ao clonazepam ou aos excipientes, insuficiencia respiratoria grave, comprometimento hepatico grave, glaucoma agudo de angulo fechado, e para tratamento de transtornos do panico em pacientes com historico de apneia do sono.",
+      "documento_fonte": "bula_clonazepam_profissional.pdf",
+      "trecho_fonte": "O clonazepam e contraindicado a pacientes com hipersensibilidade conhecida a clonazepam ou a qualquer dos excipientes do medicamento, a pacientes com insuficiencia respiratoria grave ou comprometimento hepatico grave... O clonazepam e contraindicado a pacientes com glaucoma agudo de angulo fechado.",
+      "tipo": "factual_composta"
+    },
+    {
+      "id": "Q03",
+      "categoria": "bula",
+      "pergunta": "Qual a meia-vida de eliminacao do clonazepam?",
+      "resposta_esperada": "A meia-vida de eliminacao do clonazepam e de 30 a 40 horas e e independente da dose.",
+      "documento_fonte": "bula_clonazepam_profissional.pdf",
+      "trecho_fonte": "A meia-vida de eliminacao e de 30 a 40 horas e e independente da dose.",
+      "tipo": "factual_simples"
+    },
+    {
+      "id": "Q04",
+      "categoria": "bula",
+      "pergunta": "Para que a dipirona monoidratada e indicada e qual sua concentracao na solucao oral?",
+      "resposta_esperada": "A dipirona monoidratada e indicada como antitermico e analgesico, na apresentacao de solucao oral de 50 mg/mL.",
+      "documento_fonte": "bula_dipirona_monoidratada_profissional.pdf",
+      "trecho_fonte": "Solucao oral de 50 mg/mL. ... Este medicamento e indicado como antitermico e analgesico.",
+      "tipo": "factual_simples"
+    },
+    {
+      "id": "Q05",
+      "categoria": "bula",
+      "pergunta": "A partir de que idade ou peso a dipirona pode ser usada em criancas?",
+      "resposta_esperada": "A dipirona e contraindicada para menores de 3 meses de idade ou com peso inferior a 5 kg. Acima disso, seu uso em criancas pequenas requer supervisao medica.",
+      "documento_fonte": "bula_dipirona_monoidratada_profissional.pdf",
+      "trecho_fonte": "Este medicamento e contraindicado para menores de 3 meses de idade ou pesando menos de 5 kg. ... Criancas: menores de 3 meses de idade ou pesando menos de 5 kg nao devem ser tratadas com dipirona.",
+      "tipo": "factual_simples"
+    },
+    {
+      "id": "Q06",
+      "categoria": "bula",
+      "pergunta": "Qual reacao adversa grave, embora rara, esta associada ao uso de dipirona e quais sintomas o paciente deve observar?",
+      "resposta_esperada": "A agranulocitose e uma reacao rara mas grave e potencialmente fatal. O paciente deve interromper o uso e procurar atendimento medico se apresentar febre, calafrios, dor de garganta e alteracoes dolorosas nas mucosas (boca, nariz, garganta, regiao genital ou anal).",
+      "documento_fonte": "bula_dipirona_monoidratada_profissional.pdf",
+      "trecho_fonte": "Agranulocitose: induzida pela dipirona e uma casualidade de origem imunoalergica... Embora essa reacao seja muito rara, pode ser grave e fatal. ... procurar atendimento medico imediatamente se alguns dos seguintes sinais ou sintomas... ocorrerem: febre, calafrios, dor de garganta e, alteracoes dolorosas nas mucosas.",
+      "tipo": "factual_composta"
+    },
+    {
+      "id": "Q07",
+      "categoria": "bula",
+      "pergunta": "Qual a indicacao do Ozempic e qual seu principio ativo e via de administracao?",
+      "resposta_esperada": "O Ozempic (semaglutida) e indicado para o tratamento de adultos com diabetes mellitus tipo 2 insuficientemente controlado, como adjuvante a dieta e exercicio. E de uso subcutaneo e seu principio ativo e a semaglutida, um agonista do receptor de GLP-1.",
+      "documento_fonte": "bula_ozempic_profissional.pdf",
+      "trecho_fonte": "Ozempic e indicado para o tratamento de adultos com diabetes mellitus tipo 2 insuficientemente controlado, como adjuvante a dieta e exercicio... USO SUBCUTANEO. ... A semaglutida e um agonista do receptor de GLP-1.",
+      "tipo": "factual_composta"
+    },
+    {
+      "id": "Q08",
+      "categoria": "protocolo",
+      "pergunta": "Segundo as Diretrizes Diagnosticas e Terapeuticas, qual o principal fator de risco para o cancer de pulmao?",
+      "resposta_esperada": "O tabagismo e o fator de risco mais importante para o cancer de pulmao, estando associado a cerca de 90% dos casos diagnosticados. Fumantes tem risco dez vezes maior de desenvolver a doenca em relacao aos nao fumantes.",
+      "documento_fonte": "Cancer de Pulmao - DDT.pdf",
+      "trecho_fonte": "O cancer de pulmao... em 90% dos casos diagnosticados, esta associado ao tabagismo. ... O fator de risco mais importante para ocorrencia do cancer de pulmao e o tabagismo. Fumantes tem o risco decuplicado de desenvolver a doenca, em relacao aos nao fumantes.",
+      "tipo": "factual_simples"
+    },
+    {
+      "id": "Q09",
+      "categoria": "protocolo",
+      "pergunta": "Como e feito o diagnostico da doenca de Wilson e quais exames auxiliam?",
+      "resposta_esperada": "O diagnostico da doenca de Wilson e feito pela combinacao de achados clinicos e laboratoriais, pois nao ha exame padrao-ouro. Auxiliam a dosagem de ceruloplasmina serica (geralmente reduzida), o reconhecimento de aneis de Kayser-Fleischer na cornea e a dosagem de cobre na urina de 24 horas.",
+      "documento_fonte": "Doenca de Wilson.pdf",
+      "trecho_fonte": "O diagnostico da doenca de Wilson e realizado por meio da avaliacao de achados clinicos e laboratoriais e, ate hoje, nao ha um exame padrao-ouro... por meio da dosagem dos niveis de ceruloplasmina serica, o reconhecimento de aneis de Kayser-Fleischer na cornea e a dosagem de concentracao de cobre na urina em 24 horas.",
+      "tipo": "factual_composta"
+    },
+    {
+      "id": "Q10",
+      "categoria": "protocolo",
+      "pergunta": "Qual o codigo CID-10 da doenca de Wilson e qual seu padrao de heranca genetica?",
+      "resposta_esperada": "O codigo CID-10 da doenca de Wilson e E83.0 (Disturbios do metabolismo do cobre). E um disturbio autossomico recessivo do metabolismo do cobre.",
+      "documento_fonte": "Doenca de Wilson.pdf",
+      "trecho_fonte": "E83.0 Disturbios do metabolismo do cobre. ... A doenca de Wilson e um disturbio autossomico recessivo do metabolismo do cobre.",
+      "tipo": "factual_composta"
+    },
+    {
+      "id": "Q11",
+      "categoria": "fora_do_acervo",
+      "pergunta": "Qual a dose recomendada de amoxicilina para infeccao de garganta em adultos?",
+      "resposta_esperada": "RECUSA_ESPERADA: O acervo nao contem informacoes sobre amoxicilina. A RAG deve recusar ou sinalizar que nao ha base documental para responder, em vez de inventar uma dose.",
+      "documento_fonte": null,
+      "trecho_fonte": null,
+      "tipo": "controle_negativo"
+    },
+    {
+      "id": "Q12",
+      "categoria": "fora_do_acervo",
+      "pergunta": "Qual o tratamento cirurgico indicado para apendicite aguda?",
+      "resposta_esperada": "RECUSA_ESPERADA: O acervo nao trata de apendicite. A RAG deve recusar ou sinalizar ausencia de fonte, sem alucinar conduta cirurgica.",
+      "documento_fonte": null,
+      "trecho_fonte": null,
+      "tipo": "controle_negativo"
+    }
+  ]
+}
