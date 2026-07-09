@@ -33,8 +33,9 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
 
-from embeddings import get_vectorstore
+from embeddings import get_embeddings
 from prompts import REFUSAL_MESSAGE, build_prompt
+from retriever import get_retriever
 
 load_dotenv()
 
@@ -118,7 +119,10 @@ def build_context_block(results: list[tuple[Document, float]]) -> str:
 def get_or_load_vectorstore():
     global _vectorstore
     if _vectorstore is None:
-        _vectorstore = get_vectorstore()
+        _vectorstore = get_retriever(
+            embeddings=get_embeddings(),
+            k=RETRIEVER_K,
+        ).vectorstore
     return _vectorstore
 
 
