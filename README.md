@@ -1,184 +1,197 @@
-# rag-clinico — Assistente Clínico de Consulta a Documentos
+# rag-clinico - Assistente Clínico de Consulta a Documentos
 
-Assistente de perguntas e respostas que consulta um acervo clínico (protocolos, diretrizes, bulas e prontuários sintéticos) usando RAG (Retrieval-Augmented Generation) rodando **100% localmente**. Toda resposta é fundamentada no acervo ingerido e cita o documento-fonte; perguntas fora do escopo são recusadas.
+Assistente de perguntas e respostas sobre um acervo clínico local de bulas, protocolos e prontuários sintéticos. O projeto usa RAG (Retrieval-Augmented Generation) para recuperar trechos relevantes, gerar respostas com um modelo local via Ollama e exibir as fontes consultadas.
 
-## Visão Geral da Arquitetura
+> **Uso educacional.** O sistema não substitui avaliação clínica profissional. O acervo deve conter somente documentos públicos e dados sintéticos; nunca utilize dados reais de pacientes.
 
+## Arquitetura
+
+```text
+Arquivos PDF e CSV
+  -> ingestão (SQLite)
+  -> chunking (SQLite)
+  -> embeddings (Chroma local)
+  -> recuperação por similaridade
+  -> RAG com Ollama
+  -> interface Streamlit ou CLI
 ```
-Acervo clínico → Ingestão → Persistência local (SQLite)
-→ Chunking → Embeddings → Base vetorial local (Chroma)
-→ Retriever → Pipeline RAG (LangChain) → LLM (Ollama)
-→ Interface (Streamlit) → Avaliação (fidelidade + relevância)
-→ Otimização de chunks
-```
+
+Antes de chamar o LLM, a RAG compara a distância cosseno do melhor trecho recuperado com `RETRIEVER_MAX_DISTANCE`. Perguntas sem trecho suficientemente próximo são recusadas. O prompt também instrui o modelo a responder apenas com o contexto recuperado.
 
 ## Stack
 
-| Camada             | Tecnologia                                                 |
-| ------------------ | ---------------------------------------------------------- |
-| Linguagem          | Python 3.12                                                |
-| Leitura de PDF     | pypdf / pdfplumber                                         |
-| Persistência local | SQLite                                                     |
-| Chunking           | LangChain Text Splitters (recursivo, semântico)            |
-| Embeddings         | sentence-transformers (multilingual, compatível com PT-BR) |
-| Base vetorial      | Chroma                                                     |
-| LLM                | Ollama (modelo local)                                      |
-| Orquestração       | LangChain (LCEL)                                           |
-| Interface          | Streamlit                                                  |
-| Avaliação          | RAGAS (faithfulness / relevância) + LLM-as-judge           |
+| Camada                     | Tecnologia atual                                                         |
+| -------------------------- | ------------------------------------------------------------------------ |
+| Linguagem                  | Python 3.12                                                              |
+| Leitura de PDF             | pdfplumber                                                               |
+| Persistência intermediária | SQLite                                                                   |
+| Chunking de PDFs           | `RecursiveCharacterTextSplitter` (1.000 caracteres, sobreposição de 150) |
+| Chunking de CSVs           | Agrupamento por paciente/tabela (até 1.800 caracteres)                   |
+| Embeddings                 | `sentence-transformers`, com `intfloat/multilingual-e5-base` por padrão  |
+| Base vetorial              | Chroma com distância cosseno                                             |
+| Orquestração               | LangChain (LCEL)                                                         |
+| LLM                        | Ollama, com `llama3.1` por padrão                                        |
+| Interface                  | Streamlit                                                                |
+| Avaliação                  | LLM-as-a-Judge via Ollama, com fallback heurístico                       |
 
 ## Estrutura de Pastas
 
-```
+```text
 rag-clinico/
 ├── data/
-│   ├── raw/                    # PDFs originais (protocolos, bulas, prontuários sintéticos)
-│   │   ├── protocolos/
-│   │   ├── bulas/
-│   │   └── prontuarios/
-│   └── processed/              # texto extraído/normalizado (não versionado)
-│
-├── vectorstore/                # base Chroma persistida localmente (não versionado)
-│
-├── src/
-│   ├── __init__.py
-│   ├── ingest.py                # lê PDFs/CSV, extrai texto, salva em SQLite
-│   ├── chunking.py              # gera chunks com metadados e salva no SQLite
-│   ├── embeddings.py             # gera vetores, popula o Chroma
-│   ├── rag_chain.py              # retriever + prompt + LLM (LCEL)
-│   ├── prompts.py                # templates de prompt
-│   └── app.py                    # interface Streamlit
-│
+│   ├── raw/prontuario_sinteticos/
+│   │   ├── bulas/                 # PDFs de bulas
+│   │   ├── protocolos/            # PDFs de protocolos e diretrizes
+│   │   └── prontuarios/           # CSVs de dados sintéticos
+│   └── processed/                 # SQLite gerado pela ingestão (não versionado)
+├── docs/
+│   ├── embeddings.md
+│   └── ingestao-e-chunking.md
 ├── eval/
-│   ├── test_questions.json       # gabarito: 8-12 perguntas + resposta esperada + trecho-fonte
-│   ├── evaluate.py                # roda avaliação de fidelidade/relevância
-│   ├── compare_chunking.py        # compara configurações de chunk
-│   └── results.md                 # relatório final de avaliação
-│
-├── notebooks/                     # exploração rápida (opcional)
-│   └── exploracao.ipynb
-│
-├── tests/                          # testes unitários (opcional)
-│   └── test_chunking.py
-│
-├── CONTRIBUICOES.md
+│   ├── test_questions.json        # 12 perguntas de avaliação
+│   ├── evaluate.py                # avaliação da RAG
+│   ├── compare_chunking.py        # comparação em desenvolvimento
+│   └── results.md                 # modelo de relatório manual
+├── src/
+│   ├── ingest.py                  # PDF/CSV -> SQLite
+│   ├── chunking.py                # SQLite -> chunks
+│   ├── embeddings.py              # chunks -> Chroma
+│   ├── rag_chain.py               # recuperação, prompt e LLM
+│   ├── app.py                     # interface Streamlit
+│   ├── retriever.py
+│   ├── storage.py
+│   └── vectorstore.py
+├── tests/
+│   └── test_vectorstore_retriever.py
 ├── .env.example
-├── .gitignore
-├── README.md
+├── CONTRIBUICOES.md
 ├── pyproject.toml
 └── uv.lock
 ```
 
+Os diretórios `data/processed/` e `vectorstore/` são gerados localmente e não devem ser versionados.
+
+## Pré-requisitos
+
+- [uv](https://docs.astral.sh/uv/) instalado.
+- [Ollama](https://ollama.com) instalado e acessível em `http://localhost:11434`.
+- Git.
+
+O projeto fixa Python 3.12 em `.python-version`; o `uv` cria e gerencia o ambiente virtual automaticamente.
+
 ## Setup
 
-### Pré-requisitos
-
-- [uv](https://docs.astral.sh/uv/) instalado ([instruções de instalação](https://docs.astral.sh/uv/getting-started/installation/))
-- [Ollama](https://ollama.com) instalado e rodando localmente
-- Git
-
-> Não precisa ter Python pré-instalado — o `uv` gerencia a versão do Python automaticamente a partir do `.python-version` do projeto.
-
-### 1. Clonar o repositório
+### 1. Clonar e instalar dependências
 
 ```bash
 git clone https://github.com/Borjelho/rag-clinico.git
 cd rag-clinico
-```
-
-### 2. Instalar as dependências
-
-```bash
 uv sync
 ```
 
-Isso cria o ambiente virtual (`.venv/`) automaticamente e instala todas as dependências com as versões exatas travadas no `uv.lock` — não é necessário criar/ativar venv manualmente.
-
-### 3. Configurar identidade do Git (uma vez por pessoa)
+### 2. Baixar o modelo local
 
 ```bash
-git config user.name "Nome Sobrenome"
-git config user.email "email@dominio.com"
+ollama pull llama3.1
 ```
 
-### 4. Baixar o modelo LLM local via Ollama
+Se o serviço não estiver em execução, inicie-o em outro terminal:
 
 ```bash
-ollama pull <TBD>
+ollama serve
 ```
 
-### 5. Configurar variáveis de ambiente
+### 3. Configurar o ambiente
 
 ```bash
 cp .env.example .env
-# edite o .env se necessário (ex.: nome do modelo, path do vectorstore)
 ```
 
-### 6. Rodar a ingestão do acervo
+Valores padrão disponíveis em `.env`:
+
+```dotenv
+EMBEDDING_MODEL=intfloat/multilingual-e5-base
+CHROMA_COLLECTION=acervo_clinico
+LLM_MODEL=llama3.1
+OLLAMA_BASE_URL=http://localhost:11434
+LLM_TEMPERATURE=0
+RETRIEVER_K=4
+RETRIEVER_MAX_DISTANCE=0.45
+```
+
+`RETRIEVER_MAX_DISTANCE` é um limiar de distância cosseno: `0` representa vetores idênticos e valores menores são mais semelhantes. Ajuste-o apenas após avaliar o comportamento da recuperação.
+
+## Preparar o Acervo
+
+O acervo de entrada é lido exclusivamente de `data/raw/prontuario_sinteticos/`:
+
+- PDFs em `bulas/` e `protocolos/`.
+- CSVs em `prontuarios/`.
+
+Execute as etapas na ordem abaixo:
 
 ```bash
 uv run src/ingest.py
-```
-
-### 7. Gerar chunks
-
-```bash
 uv run src/chunking.py
-```
-
-O chunking lê o banco `data/processed/documents.db`, quebra PDFs e CSVs em trechos menores e salva os chunks com metadados no próprio SQLite.
-
-### 8. Gerar embeddings e popular a base vetorial
-
-```bash
 uv run src/embeddings.py
 ```
 
-### 9. Rodar a interface
+> **Atenção:** essas etapas são reprocessamentos completos. A ingestão recria `data/processed/documents.db`; o chunking apaga e recria a tabela de chunks; os embeddings recriam a coleção Chroma. Faça backup dos artefatos locais caso precise preservá-los.
+
+Na primeira execução, o modelo de embeddings pode ser baixado e armazenado no cache local.
+
+## Usar a RAG
+
+### Interface web
 
 ```bash
 uv run streamlit run src/app.py
 ```
 
-A aplicação estará disponível em `http://localhost:8501`.
+A interface fica disponível em `http://localhost:8501` e exibe os trechos recuperados e suas fontes.
 
-### Adicionando novas dependências
-
-Combine com a squad antes de rodar isso — só quem está mexendo em dependências deve atualizar o lockfile, pra evitar conflito de merge:
+### Linha de comando
 
 ```bash
-uv add <nome-do-pacote>
+uv run src/rag_chain.py --pergunta "Qual a meia-vida de eliminação do clonazepam?"
 ```
 
-Depois de qualquer atualização de dependências, os demais integrantes devem rodar:
+Para inspecionar a recuperação vetorial sem reindexar:
 
 ```bash
-git pull
-uv sync
+uv run src/embeddings.py --busca "qual a dose máxima diária de dipirona?"
 ```
 
 ## Avaliação
 
-Para rodar a avaliação de fidelidade e relevância sobre o conjunto de teste:
+O gabarito em `eval/test_questions.json` contém 12 perguntas: 10 baseadas no acervo e 2 controles negativos, que devem ser recusados. A avaliação pontua fidelidade e relevância de 0 a 5 com um LLM local via Ollama; se ele falhar, usa uma heurística simples de fallback.
+
+Após preparar o acervo e iniciar o Ollama, execute:
 
 ```bash
-uv run eval/evaluate.py
+uv run eval/evaluate.py --config baseline
 ```
 
-Os resultados são registrados em `eval/results.md`, incluindo:
+O histórico é salvo em `eval/results.json`. O arquivo `eval/results.md` é apenas um modelo para consolidar manualmente os resultados finais.
 
-- Tabela de fidelidade/relevância por pergunta
-- Casos insatisfatórios identificados e causa provável
-- Comparação entre configurações de chunking testadas
+Para validar o fluxo de avaliação sem a RAG ou o Ollama:
 
-## Fontes de Dados
+```bash
+uv run eval/evaluate.py --mock
+```
 
-Documente aqui as fontes públicas utilizadas (protocolo/diretriz, bula, gerador de prontuários sintéticos), com link e licença/termos de uso de cada uma.
+## Acervo Incluído
 
-> ⚠️ **Nunca utilizar dados reais de pacientes.** Apenas documentos públicos e prontuários sintéticos (ex.: gerados via Synthea).
+O repositório contém, no estado atual:
 
-## Trabalho em Equipe
+- Bulas profissionais de clonazepam, dipirona monoidratada e Ozempic.
+- Protocolos sobre doença de Wilson e câncer de pulmão.
+- CSVs sintéticos de pacientes, alergias e medicamentos.
 
-- Cada integrante commita com nome/e-mail próprios (`git config user.name` / `user.email`).
-- Papéis e liderança são rotativos — ver `CONTRIBUICOES.md` para o registro de quem fez o quê.
-- Contribuições individuais e reflexões estão documentadas em [CONTRIBUICOES.md](./CONTRIBUICOES.md).
+Ao adicionar fontes, preserve o layout de diretórios de `data/raw/prontuario_sinteticos/`, registre a origem e os termos de uso, e confirme que não há dados pessoais reais.
+
+## Colaboração
+
+- Use `uv add <pacote>` somente ao alterar dependências e versione o `uv.lock` resultante.
+- Após atualizar a branch, execute `uv sync` para sincronizar o ambiente.
+- O registro de entregas e reflexões individuais está em [CONTRIBUICOES.md](./CONTRIBUICOES.md).
