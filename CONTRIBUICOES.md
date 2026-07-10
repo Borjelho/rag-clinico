@@ -18,7 +18,7 @@ No final do projeto cada membro deve preencher sua propria `Reflexão individual
 | Bryan Fernando Serafim      | Avaliação e Otimização | Ingestão e Chunking | Avaliação e Otimização | `ab3b26d`, `3f64e96`    |
 | Joao Vitor Moreira Lemos    | TBD                    | TBD                 | TBD                    | `hash`, `hash` ou `#PR` |
 | Lucas Lima Dantas           | Ingestão e Chunking    | Embeddings          | Ingestão e chunking    | `PR #1`, `PR #2`        |
-| Rafael de Almeida Maurina   | TBD                    | TBD                 | TBD                    | `hash`, `hash` ou `#PR` |
+| Rafael de Almeida Maurina   | Embeddings             | VectorDB e Retriever| Embeddings + Chroma; busca com score | `6035263`, `520e224`, `e9a2869`, `1a1e5ed`, `26bcc37` |
 
 ---
 
@@ -132,16 +132,22 @@ Não participei diretamente da avaliação e da otimização de chunking, então
 
 ### Contribuições
 
-| Área                             | O que foi feito | Arquivos relacionados          |
-| -------------------------------- | --------------- | ------------------------------ |
-| Exemplo: Ingestão e persistência | TBD             | Exemplo: `src/...`, `data/...` |
+| Área                 | O que foi feito                                                                                                             | Arquivos relacionados                                     |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Embeddings           | Converte os chunks do SQLite em vetores com modelo multilíngue (compatível com PT-BR) e popula a base vetorial local Chroma   | `src/embeddings.py`, `docs/embeddings.md`                  |
+| VectorDB e Retriever | Alinha o nome da coleção via `.env`, corrige a métrica de distância (cosseno) e adiciona a busca por similaridade com score   | `src/vectorstore.py`, `src/retriever.py`                   |
 
 ### Commits/PRs principais
 
-| Referência      | Descrição |
-| --------------- | --------- |
-| `hash` ou `#PR` | TBD       |
+| Referência           | Descrição                                        |
+| -------------------- | ------------------------------------------------ |
+| `6035263`, `520e224` | Embeddings e indexação dos chunks no Chroma      |
+| `e9a2869`, `c669918` | Busca de verificação `--busca` e documentação    |
+| `1a1e5ed`, `26bcc37` | Integração do vectorstore/retriever no fluxo     |
 
 ### Reflexão individual
 
-TBD
+Minha contribuição foi a parte de embeddings e retriever. Na etapa de embeddings, fiz a transformação dos chunks em vetores e armazenamento no Chroma. Uma dificuldade que tive foi entender as exigências do modelo escolhido, como os prefixos que a família e5 usa para diferenciar documento de pergunta. Depois da rotação, na parte de vectorstore e retriever, fiz o alinhamento do nome da coleção entre os módulos e adicionei a busca com score que o rag_chain usa para recusar perguntas fora da base de conhecimento.
+
+O caso mais insatisfatório nos testes que encontrei foi na pergunta sobre alergia a penicilina, onde o protocolo da doença de Wilson apareceu entre os melhores resultados (distancia 0.1248, quase empatado com o certo, 0.1239) porque cita muitas vezes a penicilamina. Esse caso demonstra na prática que a similaridade semântica por si não garante contexto correto, o que reforça a necessidade da resposta citar a fonte, ainda mais em contexto clínico. Com mais tempo, eu dedicaria a uma maneira de otimizar a indexação para baratear os experimentos de teste, pois reindexar tudo custava praticamente uma hora por vez. 
+Por fim, para decidir se a RAG está boa o suficiente para um contexto clínico, eu usaria três critérios: recusar corretamente todas as perguntas fora do acervo, já que em saúde inventar uma resposta é a falha mais grave; ver se a fidelidade média está alta nas perguntas do gabarito; e não ter nenhuma alucinação nas perguntas de dose e posologia, onde um erro pode ser letal para um paciente.

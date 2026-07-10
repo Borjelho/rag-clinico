@@ -45,7 +45,7 @@ CHROMA_COLLECTION=acervo_clinico
 
 Na primeira execução, o modelo é baixado automaticamente (~1.1 GB) e fica em cache local. Depois disso, tudo roda offline.
 
-Se a máquina for mais fraca, dá para trocar no `.env` por `intfloat/multilingual-e5-small` (~3x mais rápido). Ao trocar de modelo, é preciso reindexar, porque vetores de modelos diferentes não são compatíveis entre si.
+Se a máquina for mais fraca, dá para trocar no `.env` por `intfloat/multilingual-e5-small`. Ao trocar de modelo, é preciso reindexar, porque vetores de modelos diferentes não são compatíveis entre si.
 
 ### O detalhe dos prefixos
 
