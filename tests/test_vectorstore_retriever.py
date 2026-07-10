@@ -13,7 +13,7 @@ sys.path.insert(0, str(SRC_DIR))
 
 from langchain_core.embeddings import Embeddings
 
-from retriever import get_retriever, similarity_search
+from retriever import get_retriever, similarity_search, similarity_search_with_score
 from vectorstore import load_chunk_documents, rebuild_vectorstore
 
 
@@ -71,6 +71,13 @@ def test_vectorstore_rebuild_and_retriever_smoke() -> None:
             k=4,
         )
         retrieved_docs = retriever.invoke("Doenca de Wilson tratamento protocolo")
+        scored_results = similarity_search_with_score(
+            "dipirona contraindicacoes bula",
+            embeddings=embeddings,
+            persist_directory=persist_directory,
+            collection_name=collection_name,
+            k=3,
+        )
 
         assert documents
         assert vectorstore._collection.count() == len(documents)
@@ -81,6 +88,13 @@ def test_vectorstore_rebuild_and_retriever_smoke() -> None:
             doc.metadata.get("document_name") for doc in direct_docs + retrieved_docs
         )
         assert all(doc.metadata.get("chunk_uid") for doc in direct_docs + retrieved_docs)
+        assert len(scored_results) == 3
+        assert all(
+            isinstance(distance, float) for _doc, distance in scored_results
+        )
+        assert [distance for _doc, distance in scored_results] == sorted(
+            distance for _doc, distance in scored_results
+        )
 
         print(f"chunks_loaded={len(documents)}")
         print(f"chroma_count={vectorstore._collection.count()}")

@@ -37,3 +37,19 @@ def similarity_search(
     """Executa uma busca direta por similaridade na coleção Chroma persistida."""
     vectorstore = open_vectorstore(embeddings, persist_directory, collection_name)
     return vectorstore.similarity_search(query, k=k)
+
+
+def similarity_search_with_score(
+    query: str,
+    embeddings: Embeddings,
+    persist_directory: Path = VECTORSTORE_DIR,
+    collection_name: str = COLLECTION_NAME,
+    k: int = DEFAULT_SEARCH_K,
+) -> list[tuple[Document, float]]:
+    """Busca por similaridade retornando a distância cosseno de cada chunk.
+
+    Distância menor = mais parecido (0 = idêntico). É o que o rag_chain usa
+    para decidir se a pergunta está dentro do acervo antes de chamar o LLM.
+    """
+    vectorstore = open_vectorstore(embeddings, persist_directory, collection_name)
+    return vectorstore.similarity_search_with_score(query, k=k)
