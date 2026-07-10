@@ -12,13 +12,13 @@ No final do projeto cada membro deve preencher sua propria `Reflexão individual
 
 ## Resumo das Contribuições
 
-| Pessoa                      | Frente inicial      | Frente após rotação | Principais entregas | Commits/PRs             |
-| --------------------------- | ------------------- | ------------------- | ------------------- | ----------------------- |
-| Alex Yure Fernandes Moreira | VectorDB e Retriever| Rag chain           | VectorDB e Retriever| `165324d`, `9cc4f4e`    |
-| Bryan Fernando Serafim      | TBD                 | TBD                 | TBD                 | `hash`, `hash` ou `#PR` |
-| Joao Vitor Moreira Lemos    | TBD                 | TBD                 | TBD                 | `hash`, `hash` ou `#PR` |
-| Lucas Lima Dantas           | Ingestão e Chunking | Embeddings          | Ingestão e chunking | `PR #1`, `PR #2`        |
-| Rafael de Almeida Maurina   | TBD                 | TBD                 | TBD                 | `hash`, `hash` ou `#PR` |
+| Pessoa                      | Frente inicial         | Frente após rotação | Principais entregas    | Commits/PRs             |
+| --------------------------- | -------------------    | ------------------- | -------------------    | ----------------------- |
+| Alex Yure Fernandes Moreira | VectorDB e Retriever   | Rag chain           | VectorDB e Retriever   | `165324d`, `9cc4f4e`    |
+| Bryan Fernando Serafim      | Avaliação e Otimização | Ingestão e Chunking | Avaliação e Otimização | `ab3b26d`, `3f64e96`    |
+| Joao Vitor Moreira Lemos    | TBD                    | TBD                 | TBD                    | `hash`, `hash` ou `#PR` |
+| Lucas Lima Dantas           | Ingestão e Chunking    | Embeddings          | Ingestão e chunking    | `PR #1`, `PR #2`        |
+| Rafael de Almeida Maurina   | TBD                    | TBD                 | TBD                    | `hash`, `hash` ou `#PR` |
 
 ---
 
@@ -63,19 +63,27 @@ Meu maior receio era não conseguir fazer bem a integração com os componentes 
 
 ### Contribuições
 
-| Área                             | O que foi feito | Arquivos relacionados          |
-| -------------------------------- | --------------- | ------------------------------ |
-| Exemplo: Ingestão e persistência | TBD             | Exemplo: `src/...`, `data/...` |
+| Área | O que foi feito | Arquivos relacionados |
+| ---- | --------------- | --------------------- |
+| Avaliação | Conjunto de teste com 12 perguntas clínicas (10 ancoradas no acervo + 2 controles negativos para verificar recusa de perguntas fora do acervo) e motor de avaliação com LLM as a Judge, medindo fidelidade e relevância por pergunta. | `eval/test_questions.json`, `eval/evaluate.py` |
+| Otimização de chunk | Script para comparar configurações de chunk sobre o mesmo gabarito, reprocessando o pipeline e reavaliando cada configuração. | `eval/compare_chunking.py` |
+| Ingestão (pós-rotação) | Tratamento para ignorar páginas de PDF sem texto extraível, evitando chunks vazios na base vetorial. | `src/ingest.py` |
+| Liderança / integração | Coordenação da sprint (dailies, workflow de Git, estratégia de branch develop) | — |
 
 ### Commits/PRs principais
 
-| Referência      | Descrição |
-| --------------- | --------- |
-| `hash` ou `#PR` | TBD       |
+| Referência | Descrição |
+| ---------- | --------- |
+| `ab3b26d` | Frente de avaliação: gabarito, motor (LLM as a Judge) e comparador de chunk |
+| `3f64e96` | Ignora páginas de PDF sem texto extraível na ingestão |
 
 ### Reflexão individual
 
-TBD
+Construí a frente de avaliação e, na segunda metade, atuei na ingestão, o que me colocou dos dois lados das competências do desafio: avaliar e construir. O que mais me ensinou foi montar os controles negativos (perguntas fora do acervo), porque em saúde uma resposta inventada é grave, e sem esses casos não há como provar que a RAG recusa o que não sabe.
+
+O caso mais insatisfatório que encontrei foi a recuperação das bulas, sobretudo a dipirona, que falhou em todas as perguntas (fidelidade e relevância 0): o retriever trazia prontuários em vez da bula. A causa é o desbalanceamento do acervo, cerca de 9.200 chunks de prontuário contra 540 de PDF, então os prontuários afogam as bulas na busca. Testar três configurações de chunk (1000/150, 512/64, 1500/200) deu resultados idênticos, o que confirmou o diagnóstico: o gargalo não é o tamanho do chunk, é o balanceamento do acervo.
+
+Com mais tempo, atacaria a causa raiz: separar coleções por tipo de documento ou filtrar por tipo na recuperação. Sobre a RAG estar "boa o suficiente" para uso clínico, diria que ainda não, ela acerta protocolos e recusa o que está fora do acervo, mas a cobertura incompleta das bulas seria inaceitável num uso real. Meu critério para aprovar seria: nenhuma falha sistemática de recuperação por categoria clínica e recusa correta próxima de 100% nos casos fora do acervo.
 
 ---
 
