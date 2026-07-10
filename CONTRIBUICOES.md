@@ -14,7 +14,7 @@ No final do projeto cada membro deve preencher sua propria `Reflexão individual
 
 | Pessoa                      | Frente inicial      | Frente após rotação | Principais entregas | Commits/PRs             |
 | --------------------------- | ------------------- | ------------------- | ------------------- | ----------------------- |
-| Alex Yure Fernandes Moreira | TBD                 | TBD                 | TBD                 | `hash`, `hash` ou `#PR` |
+| Alex Yure Fernandes Moreira | VectorDB e Retriever| Rag chain           | VectorDB e Retriever| `165324d`, `9cc4f4e`    |
 | Bryan Fernando Serafim      | TBD                 | TBD                 | TBD                 | `hash`, `hash` ou `#PR` |
 | Joao Vitor Moreira Lemos    | TBD                 | TBD                 | TBD                 | `hash`, `hash` ou `#PR` |
 | Lucas Lima Dantas           | Ingestão e Chunking | Embeddings          | Ingestão e chunking | `PR #1`, `PR #2`        |
@@ -26,19 +26,36 @@ No final do projeto cada membro deve preencher sua propria `Reflexão individual
 
 ### Contribuições
 
-| Área                             | O que foi feito | Arquivos relacionados          |
-| -------------------------------- | --------------- | ------------------------------ |
-| Exemplo: Ingestão e persistência | TBD             | Exemplo: `src/...`, `data/...` |
+| Área                             | O que foi feito                                                          | Arquivos relacionados|
+| -------------------------------- | -------------------------------------------------------------------------|--------------------- |
+| VectorDB                         |Implementação de uma base vetorial local em Chroma, incluindo carregamento|`src/vectorstore.py`  |
+|                                  |dos chunks armazenados no SQLite, conversão para documentos do LangChain, |                      |
+|                                  |normalização de metadados, geração de identificadores estáveis e          |                      |
+|                                  |reconstrução da coleção em lotes.                                         |                      |
+| -------------------------------- | ------------------------------------------------------------------------ | -------------------- |
+| Retriever                        | Implementação de funções para abrir o retriever sobre a coleção Chroma e |`src/retriever.py`    |
+|                                  |realizar buscas por similaridade.                                         |                      |
+| -------------------------------- |------------------------------------------------------------------------- | -------------------- |
+|Integração Rag_chain Retriever    |Integração do do rag_chain com o retriever do projeto, apenas substituindo|`src/rag_chain.py`    |
+|                                  |o acesso direto ao `get_vectorstore` de `embeddings.py` e colocando os    |                      |
+|                                  |componentes de vectorDB e retriever no fluxo da aplicação.                |                      |
+
 
 ### Commits/PRs principais
 
-| Referência      | Descrição |
-| --------------- | --------- |
-| `hash` ou `#PR` | TBD       |
+| Referência      | Descrição                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| `9cc4f4e`       | Adiciona VectorDB local com Crhoma, o retriever e um teste funcional dos componentes       |
+
+
+
 
 ### Reflexão individual
 
-TBD
+Durante o projeto, precisei dar uma revisada em como o RAG organiza os documentos para encontrar as informações e construir as respostas. Para isso, estudei como os trechos são transformados em representações que pudessem permitir a comparação dos seus significados, como a base vetorial armazena esse conteúdo e como o retriever seleciona os resultados mais próximos. 
+Depois da rotação, tive que estudar melhor o funcionamento geral da aplicação pois o retriever que criei acabou ficando fora do fluxo, mas foi um problema fácil de corrigir alterando apenas poucas linhas para fazer o `rag_chain.py` apontar para o local correto.
+Meu maior receio era não conseguir fazer bem a integração com os componentes dos outros membros, mas no final a boa documentação e a comunicação da equipe facilitaram bastante as soluções dos problemas.
+
 
 ---
 
