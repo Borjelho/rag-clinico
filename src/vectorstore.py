@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from storage import DB_PATH, PROJECT_ROOT, connect_database
 
+load_dotenv()
 
 VECTORSTORE_DIR = PROJECT_ROOT / "vectorstore"
-COLLECTION_NAME = "clinical_documents"
+COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "acervo_clinico")
 DEFAULT_ADD_BATCH_SIZE = 1000
 
 
@@ -106,6 +109,10 @@ def open_vectorstore(
         collection_name=collection_name,
         embedding_function=embeddings,
         persist_directory=str(persist_directory),
+        # Distância cosseno na criação da coleção, igual ao src/embeddings.py.
+        # Sem isso o Chroma cria com L2 e o RETRIEVER_MAX_DISTANCE do
+        # src/rag_chain.py (calibrado para cosseno) deixa de fazer sentido.
+        collection_metadata={"hnsw:space": "cosine"},
     )
 
 
