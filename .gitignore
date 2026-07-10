@@ -4,3 +4,5 @@ __pycache__/
 vectorstore/*
 data/processed/*
 *.db
+eval/results.json
+eval/chunking_comparison.json

@@ -102,6 +102,11 @@ def ingest_pdf(conn: sqlite3.Connection, path: Path) -> int:
     with pdfplumber.open(path) as pdf:
         for page_number, page in enumerate(pdf.pages, start=1):
             text = normalize_text(page.extract_text())
+            # Pula paginas sem texto extraivel (capas, paginas em branco,
+            # paginas apenas com imagem): elas gerariam chunks vazios que
+            # poluem a base vetorial e degradam a recuperacao.
+            if not text:
+                continue
             insert_pdf_page(
                 conn,
                 source_id=source_id,
