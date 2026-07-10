@@ -50,8 +50,8 @@ rag-clinico/
 ├── eval/
 │   ├── test_questions.json        # 12 perguntas de avaliação
 │   ├── evaluate.py                # avaliação da RAG
-│   ├── compare_chunking.py        # comparação em desenvolvimento
-│   └── results.md                 # modelo de relatório manual
+│   ├── compare_chunking.py        # comparação de configurações de chunk
+│   └── results.md                 # relatório de avaliação com resultados
 ├── src/
 │   ├── ingest.py                  # PDF/CSV -> SQLite
 │   ├── chunking.py                # SQLite -> chunks
@@ -66,6 +66,8 @@ rag-clinico/
 ├── .env.example
 ├── CONTRIBUICOES.md
 ├── pyproject.toml
+├── requirements.txt
+├── README.md
 └── uv.lock
 ```
 
@@ -172,7 +174,13 @@ Após preparar o acervo e iniciar o Ollama, execute:
 uv run eval/evaluate.py --config baseline
 ```
 
-O histórico é salvo em `eval/results.json`. O arquivo `eval/results.md` é apenas um modelo para consolidar manualmente os resultados finais.
+O histórico é salvo em `eval/results.json`. O relatório final da avaliação, com as médias de fidelidade e relevância, os casos insatisfatórios e a comparação entre configurações de chunk, está em `eval/results.md`.
+
+Para comparar configurações de chunk (reprocessa e reavalia cada uma):
+
+```bash
+uv run eval/compare_chunking.py
+```
 
 Para validar o fluxo de avaliação sem a RAG ou o Ollama:
 
@@ -189,6 +197,26 @@ O repositório contém, no estado atual:
 - CSVs sintéticos de pacientes, alergias e medicamentos.
 
 Ao adicionar fontes, preserve o layout de diretórios de `data/raw/prontuario_sinteticos/`, registre a origem e os termos de uso, e confirme que não há dados pessoais reais.
+
+## Fontes de Dados e Licenças
+
+O acervo clínico é composto exclusivamente por documentos públicos e prontuários
+sintéticos, em conformidade com a LGPD (nenhum dado real de paciente é utilizado).
+Todas as fontes permitem perguntas com resposta verificável, pois trazem
+informações objetivas (posologia, contraindicações, critérios diagnósticos).
+
+| Fonte | Tipo | Origem | Licença / Termos |
+| ----- | ---- | ------ | ---------------- |
+| Bulas de medicamentos | PDF | Bulário Eletrônico da ANVISA (consultas.anvisa.gov.br) | Documentos públicos e gratuitos |
+| Protocolos e diretrizes clínicas | PDF | PCDT / Diretrizes do Ministério da Saúde (gov.br/saude) e CONITEC | Documentos públicos de acesso livre |
+| Prontuários sintéticos | CSV | Synthea (synthetichealth.github.io/synthea) | Apache License 2.0 — dados fictícios, sem restrição de privacidade |
+
+**Por que o acervo permite respostas verificáveis:** bulas e protocolos são
+documentos normativos com informação factual e estável (doses, exames,
+contraindicações), o que torna possível montar um gabarito com resposta esperada
+e trecho-fonte. Os prontuários do Synthea são "realistas, porém não reais",
+gerados artificialmente, e por isso não incorrem em questões de privacidade
+(LGPD), servindo para simular consultas a registros de pacientes.
 
 ## Colaboração
 
