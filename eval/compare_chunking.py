@@ -10,17 +10,25 @@ Fluxo por configuracao:
     3. roda evaluate() sobre o gabarito
     4. coleta media de fidelidade e relevancia
 
-Assim como evaluate.py, este script e desacoplado. Enquanto o pipeline real
-(chunking parametrizavel + embeddings + vector store) nao estiver pronto, use
---mock para exercitar a comparacao de ponta a ponta e validar a tabela de saida.
+Assim como evaluate.py, este script e desacoplado. Use --mock para exercitar
+a comparacao de ponta a ponta (sem reprocessar nada de verdade, juiz
+heuristico) e validar a tabela de saida antes de gastar tempo com o pipeline
+real.
+
+reprocess_pipeline(config) reprocessa de fato entre uma config e outra:
+re-chunka (src/chunking.py), reindexa o Chroma (src/embeddings.py) e invalida
+o cache do rag_chain. Sem isso, comparar "configs" so reavalia a mesma base
+vetorial 3 vezes e da resultado identico -- foi exatamente o bug encontrado
+e corrigido aqui (ver eval/results.md, secao 5).
 
 Uso:
     uv run eval/compare_chunking.py --mock
-    uv run eval/compare_chunking.py            # usa o pipeline real (quando pronto)
+    uv run eval/compare_chunking.py            # pipeline real (Ollama precisa estar rodando)
 
-Integracao com o pipeline real (quando as frentes de chunking/embeddings/vector
-store estiverem prontas), implemente `reprocess_pipeline(config)` chamando os
-modulos da squad. Os pontos de plugue estao marcados com TODO(integracao).
+Atencao: cada config re-chunka + reindexa o acervo inteiro (~9.800 chunks),
+o que e lento (reindexacao dos embeddings custa a maior parte do tempo). O
+script restaura a config baseline (1000/150) ao final para nao deixar a base
+numa configuracao de teste.
 """
 
 from __future__ import annotations
@@ -57,27 +65,38 @@ CHUNK_CONFIGS = [
 
 
 def reprocess_pipeline(config: dict) -> None:
-    """Reprocessa chunking + embeddings + vector store para a config dada.
+    """Re-chunka e reindexa o acervo com a configuracao dada (efeito real).
 
-    TODO(integracao): quando as frentes estiverem prontas, este corpo deve:
-      1. sobrescrever PDF_CHUNK_SIZE / PDF_CHUNK_OVERLAP em src/chunking.py
-         (ou passar via parametro/env) e rodar chunk_all()
-      2. rodar src/embeddings.py para regenerar os vetores
-      3. reindexar o vector store (Chroma)
-
-    Enquanto isso nao existe, e um no-op (usado no modo --mock).
+    Sem isso, rodar o mesmo pipeline 3x com "configs" diferentes so reavalia
+    a mesma base vetorial 3 vezes -- os numeros saem identicos e nao provam
+    nada sobre o efeito do chunking.
     """
-    # Exemplo de como sera a integracao (deixado comentado de proposito):
-    #
-    #   import chunking
-    #   chunking.PDF_CHUNK_SIZE = config["pdf_chunk_size"]
-    #   chunking.PDF_CHUNK_OVERLAP = config["pdf_chunk_overlap"]
-    #   conn = storage.connect_database()
-    #   chunking.chunk_all(conn)
-    #   conn.close()
-    #   embeddings.build_index()   # regenera vetores + reindexa Chroma
-    #
-    return None
+    import chunking
+    import embeddings
+    from storage import connect_database
+
+    # 1. Sobrescreve os parametros de chunk usados pelo pdf_splitter().
+    chunking.PDF_CHUNK_SIZE = config["pdf_chunk_size"]
+    chunking.PDF_CHUNK_OVERLAP = config["pdf_chunk_overlap"]
+
+    # 2. Re-executa o chunking (limpa e refaz a tabela chunks).
+    conn = connect_database()
+    try:
+        chunks, pdf_chunks, csv_chunks = chunking.chunk_all(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    print(f"  re-chunk: {chunks} chunks ({pdf_chunks} PDF, {csv_chunks} CSV)")
+
+    # 3. Reindexa o Chroma com os novos chunks.
+    embeddings.run_indexing()
+
+    # 4. Invalida o cache do rag_chain: run_indexing() recria a colecao,
+    #    entao a referencia antiga em _vectorstore fica invalida.
+    import rag_chain
+
+    rag_chain._vectorstore = None
+    rag_chain._chain = None
 
 
 def run_comparison(use_mock: bool) -> dict:
@@ -157,6 +176,13 @@ def main() -> int:
     comparison = run_comparison(use_mock=args.mock)
     print_table(comparison)
     save_comparison(comparison)
+
+    # Restaura o chunking baseline ao final, para nao deixar a base numa config de teste.
+    if not args.mock:
+        print("\nRestaurando configuracao baseline (1000/150)...")
+        reprocess_pipeline(CHUNK_CONFIGS[0])
+        print("Base restaurada para baseline.")
+
     return 0
 
 

@@ -16,7 +16,7 @@ No final do projeto cada membro deve preencher sua propria `Reflexão individual
 | --------------------------- | -------------------    | ------------------- | -------------------    | ----------------------- |
 | Alex Yure Fernandes Moreira | VectorDB e Retriever   | Rag chain           | VectorDB e Retriever   | `165324d`, `9cc4f4e`    |
 | Bryan Fernando Serafim      | Avaliação e Otimização | Ingestão e Chunking | Avaliação e Otimização | `ab3b26d`, `3f64e96`    |
-| Joao Vitor Moreira Lemos    | TBD                    | TBD                 | TBD                    | `hash`, `hash` ou `#PR` |
+| Joao Vitor Moreira Lemos    | RAG chain e interface  | Avaliação e Otimização | RAG chain (LCEL) + Streamlit; fix no compare_chunking.py | `3b21726`, `9199e17`, `<hash pós-rotação>` |
 | Lucas Lima Dantas           | Ingestão e Chunking    | Embeddings          | Ingestão e chunking    | `PR #1`, `PR #2`        |
 | Rafael de Almeida Maurina   | Embeddings             | VectorDB e Retriever| Embeddings + Chroma; busca com score | `6035263`, `520e224`, `e9a2869`, `1a1e5ed`, `26bcc37` |
 
@@ -91,19 +91,29 @@ Com mais tempo, atacaria a causa raiz: separar coleções por tipo de documento 
 
 ### Contribuições
 
-| Área                             | O que foi feito | Arquivos relacionados          |
-| -------------------------------- | --------------- | ------------------------------ |
-| Exemplo: Ingestão e persistência | TBD             | Exemplo: `src/...`, `data/...` |
+| Área | O que foi feito | Arquivos relacionados |
+| ---- | --------------- | --------------------- |
+| RAG chain (pré-rotação) | Retriever + prompt + LLM via LangChain (LCEL). Dupla camada de recusa: (1) distância cosseno do melhor chunk acima de `RETRIEVER_MAX_DISTANCE` recusa antes de chamar o LLM; (2) o próprio prompt instrui o modelo a recusar se o contexto não contiver a resposta, cada resposta cita a fonte (documento + página, ou tabela + paciente). | `src/rag_chain.py`, `src/prompts.py` |
+| Interface Streamlit (pré-rotação) | Chat com historico de sessão, expanders mostrando fontes citadas e trechos recuperados, tratamento de erro para Ollama fora do ar ou base vetorial não populada. | `src/app.py` |
+| Avaliação e Otimização (pós-rotação) | Encontrei e corrigi um bug em `compare_chunking.py`: `reprocess_pipeline()` era um no-op, então as 3 configurações de chunk eram avaliadas sobre a mesma base vetorial, gerando resultados idênticos por construção. Corrigi para re-chunkar de verdade (`chunking.chunk_all()`), reindexar o Chroma (`embeddings.run_indexing()`) e invalidar o cache do `rag_chain` entre configs. Confirmei rodando o pipeline (sem LLM) que a contagem de chunks de PDF agora varia genuinamente entre configs (536 -> 945 -> 371). | `eval/compare_chunking.py`, `eval/results.md` |
 
 ### Commits/PRs principais
 
-| Referência      | Descrição |
-| --------------- | --------- |
-| `hash` ou `#PR` | TBD       |
+| Referência | Descrição |
+| ---------- | --------- |
+| `3b21726` | Implementa funcionalidade de RAG chain |
+| `9199e17` | Ajuste na RAG chain |
+| `<hash pós-rotação>` | Fix em `reprocess_pipeline()` (compare_chunking.py) + atualização de `eval/results.md` |
 
 ### Reflexão individual
 
-TBD
+Minha contribuição inicial foi a RAG chain e a interface Streamlit: montei o retriever, o prompt e a chamada ao LLM via LCEL, com uma dupla camada de recusa (distância de similaridade e instrução no próprio prompt) para que o sistema não inventasse resposta fora do acervo — que é exatamente a competência de "construir" pedida no desafio. Depois da rotação, fui para Avaliação e Otimização, e a primeira coisa que fiz foi validar o que já existia antes de rodar qualquer coisa: percebi que `compare_chunking.py` reavaliava a mesma base vetorial três vezes, porque `reprocess_pipeline()` nunca reprocessava de fato. Corrigi isso para re-chunkar, reindexar e invalidar o cache do `rag_chain` entre configurações, e confirmei rodando o pipeline (chunking real, sem LLM) que a contagem de chunks de PDF passou a variar de verdade entre as configs (536 na baseline, 945 na config menor, 371 na maior) — antes do fix, as três rodavam sobre os mesmos 536.
+
+O caso técnico mais insatisfatório que encontrei foi descobrir que a nossa avaliação de otimização de chunking estava gerando um 'falso positivo'. Como o colega Bryan notou inicialmente, testar diferentes tamanhos de chunk parecia não alterar os resultados das respostas. Ao investigar a fundo o script compare_chunking.py, diagnostiquei que a função reprocess_pipeline() era um no-op — ou seja, ela não estava reprocessando a base de fato, fazendo com que todas as avaliações rodassem sobre a mesma base vetorial e gerassem resultados idênticos por construção.
+
+Após corrigir o fluxo para garantir que a reindexação e a invalidação de cache ocorressem de verdade entre as configurações, comprovei a mudança na volumetria física dos dados: a configuração Baseline gerou 536 chunks de PDF, enquanto a configuração menor foi para 945 chunks e a maior para 371 chunks.
+
+O que eu faria diferente com mais tempo: meu maior receio na primeira metade foi o acoplamento com o trabalho do Rafael (embeddings) e do Alex (retriever), que ainda não tinham sido mesclados quando escrevi a RAG chain, resolvi isso escrevendo contra o contrato que a Bryan já tinha definido em `evaluate.py` (`answer(pergunta) -> {"resposta", "contextos", "fontes"}`), o que fez a integração posterior ser quase sem atrito. Na segunda metade, com mais tempo eu teria rodado a comparação de chunking completa (com Ollama) antes de escrever o relatório final, em vez de documentar a correção do bug com a evidencia parcial que consegui reuni sem o LLM. Para decidir se a RAG está boa o suficiente para um contexto clínico, meu critério seria: recusa correta em praticamente 100% dos controles negativos (Q11/Q12), fidelidade média alta nas perguntas ancoradas no acervo, e nenhuma falha sistematica de recuperação numa categoria inteira (como a suspeita de que a dipirona não aparece por causa do desbalanceamento do acervo) esse último ponto, se confirmado, eu consideraria bloqueante para uso real, mesmo com boa fidelidade média geral.
 
 ---
 

@@ -23,6 +23,13 @@ se a RAG recusa corretamente perguntas sem base documental.
 Cada pergunta traz resposta esperada e trecho-fonte, servindo de gabarito
 para o LLM as a Judge.
 
+**Tamanho real do acervo** (confirmado rodando `ingest.py` + `chunking.py`
+sobre `data/raw/prontuario_sinteticos/`): 8 fontes (5 PDFs + 3 CSVs), 155
+paginas de PDF com texto extraivel, 44.757 linhas de CSV. Apos chunking
+(config baseline 1000/150): 9.804 chunks totais, sendo 536 de PDF e 9.268 de
+CSV — um desbalanceamento de ~17x a favor dos prontuarios, relevante para a
+secao 5.
+
 ## 2. Metodo de avaliacao
 
 - **Juiz:** LLM as a Judge (modelo local via Ollama), temperatura 0.
@@ -71,6 +78,43 @@ Comparacao de configuracoes com o mesmo gabarito (`compare_chunking.py`).
 
 Comando: `uv run eval/compare_chunking.py`
 
+### 5.1 Bug encontrado e corrigido: comparacao nao reprocessava de verdade
+
+Antes de rodar a comparacao "para valer", encontramos um problema em
+`reprocess_pipeline()`: a funcao era um no-op (so tinha um exemplo comentado
+de como a integracao *deveria* ficar). Resultado: as 3 configuracoes eram
+avaliadas sobre a mesma base vetorial ja existente, gerando numeros
+identicos entre elas — o que parecia (erradamente) confirmar que o tamanho
+do chunk nao fazia diferenca.
+
+Corrigimos `reprocess_pipeline()` para, a cada configuracao: (1) sobrescrever
+`PDF_CHUNK_SIZE`/`PDF_CHUNK_OVERLAP` em `src/chunking.py` e rodar
+`chunk_all()` de verdade; (2) reindexar o Chroma via `embeddings.run_indexing()`;
+(3) invalidar o cache do `rag_chain` (`_vectorstore`/`_chain`), que senao
+continuaria apontando para a colecao antiga.
+
+**Evidencia de que o fix funciona** — contagem real de chunks por config,
+rodando `chunk_all()` sobre o acervo atual (8 fontes: 5 PDFs + 3 CSVs):
+
+| Config | pdf_chunk_size | overlap | Chunks de PDF | Chunks de CSV | Total |
+| ------ | -------------- | ------- | -------------- | -------------- | ----- |
+| baseline_1000_150 | 1000 | 150 | 536 | 9.268 | 9.804 |
+| menor_512_64 | 512 | 64 | 945 | 9.268 | 10.213 |
+| maior_1500_200 | 1500 | 200 | 371 | 9.268 | 9.639 |
+
+Os chunks de PDF variam bastante entre configs (371 a 945), como esperado —
+antes do fix, os 3 rodavam sobre os mesmos 536. Os chunks de CSV nao mudam
+porque o agrupamento de prontuarios usa `CSV_MAX_CHARS`, um parametro
+separado que essas configs nao tocam.
+
+### 5.2 Resultado por configuracao (fidelidade / relevancia)
+
+> _TBD — preencher apos rodar `uv run eval/compare_chunking.py` com o Ollama
+> ativo. O fix garante que cada linha agora reflete uma base vetorial
+> genuinamente diferente; antes do fix os 3 numeros abaixo sairiam iguais
+> por construcao, entao qualquer resultado anterior a esta correcao deve
+> ser descartado._
+
 | Config | chunk_size | overlap | Fidelidade | Relevancia |
 | ------ | ---------- | ------- | ---------- | ---------- |
 | baseline | 1000 | 150 | _TBD_ | _TBD_ |
@@ -84,6 +128,14 @@ Comando: `uv run eval/compare_chunking.py`
   podem fragmentar contexto que precisa ser lido junto (ex.: posologia).
 - Efeito de chunks maiores: preservam contexto, mas podem diluir o trecho-alvo
   e trazer ruido para o LLM.
+- **Hipotese do desbalanceamento do acervo** (levantada por Bryan antes do
+  fix, ao ver os 3 resultados identicos): com ~9.268 chunks de CSV contra
+  apenas 371-945 de PDF dependendo da config, os prontuarios podem "afogar"
+  as bulas na busca por similaridade, independentemente do tamanho do chunk.
+  Essa hipotese continua plausivel (o desbalanceamento e real, ver tabela
+  5.1), mas precisa ser reverificada com os numeros desta secao (5.2), ja
+  que a evidencia original (resultados identicos) veio do bug, nao de um
+  teste valido.
 - Decisao final: qual configuracao a squad adotou e o motivo.
 
 ## 6. Conclusao
