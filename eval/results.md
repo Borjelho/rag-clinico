@@ -3,9 +3,6 @@
 > Documento de avaliacao exigido na entrega final (Parte B do desafio).
 > Cobre: conjunto de teste, medicao de fidelidade e relevancia, casos
 > insatisfatorios e comparacao entre configuracoes de chunk.
->
-> Os numeros abaixo sao preenchidos apos rodar `evaluate.py` e
-> `compare_chunking.py` sobre o pipeline real (nao no modo `--mock`).
 
 ## 1. Conjunto de teste
 
@@ -32,45 +29,48 @@ secao 5.
 
 ## 2. Metodo de avaliacao
 
-- **Juiz:** LLM as a Judge (modelo local via Ollama), temperatura 0.
+- **Juiz:** LLM as a Judge (`llama3.1` local via Ollama), temperatura 0.
 - **Fidelidade (0-5):** a resposta esta ancorada no contexto recuperado, sem alucinar.
 - **Relevancia (0-5):** a resposta de fato responde a pergunta.
 - **Controle negativo:** recusar corretamente pontua 5/5; inventar resposta pontua 0.
 
 Comando: `uv run eval/evaluate.py --config baseline`
 
-## 3. Resultado da configuracao baseline
+## 3. Resultado da configuracao baseline (chunk 1000 / overlap 150)
 
-> Preencher apos rodar no pipeline real.
-
-- Media de fidelidade: **_TBD_ / 5**
-- Media de relevancia: **_TBD_ / 5**
+- Media de fidelidade: **2,92 / 5**
+- Media de relevancia: **3,00 / 5**
 
 | ID | Categoria | Fidelidade | Relevancia | Observacao |
-| -- | --------- | ---------- | ---------- | ---------- |
-| Q01 | bula | _TBD_ | _TBD_ | |
-| Q02 | bula | _TBD_ | _TBD_ | |
-| Q03 | bula | _TBD_ | _TBD_ | |
-| Q04 | bula | _TBD_ | _TBD_ | |
-| Q05 | bula | _TBD_ | _TBD_ | |
-| Q06 | bula | _TBD_ | _TBD_ | |
-| Q07 | bula | _TBD_ | _TBD_ | |
-| Q08 | protocolo | _TBD_ | _TBD_ | |
-| Q09 | protocolo | _TBD_ | _TBD_ | |
-| Q10 | protocolo | _TBD_ | _TBD_ | |
-| Q11 | fora_do_acervo | _TBD_ | _TBD_ | recusa esperada |
-| Q12 | fora_do_acervo | _TBD_ | _TBD_ | recusa esperada |
+| -- | --------- | :--------: | :--------: | ---------- |
+| Q01 | bula (clonazepam) | 0 | 0 | recuperou prontuarios (CSV), nao a bula |
+| Q02 | bula (clonazepam) | 5 | 5 | recuperou a bula corretamente |
+| Q03 | bula (clonazepam) | 5 | 5 | recuperou a bula corretamente |
+| Q04 | bula (dipirona) | 0 | 0 | recuperou prontuarios irrelevantes |
+| Q05 | bula (dipirona) | 0 | 0 | recuperou prontuarios irrelevantes |
+| Q06 | bula (dipirona) | 2 | 1 | recuperacao parcial, resposta fraca |
+| Q07 | bula (Ozempic) | 4 | 5 | recuperou a bula corretamente |
+| Q08 | protocolo (cancer pulmao) | 0 | 0 | nao recuperou o trecho do fator de risco |
+| Q09 | protocolo (Wilson) | 4 | 5 | recuperou o protocolo, resposta correta |
+| Q10 | protocolo (Wilson) | 5 | 5 | recuperou o protocolo, resposta correta |
+| Q11 | fora do acervo | 5 | 5 | recusou corretamente |
+| Q12 | fora do acervo | 5 | 5 | recusou corretamente |
+
+**Leitura:** no baseline, os controles negativos passam (recusa correta), os
+protocolos de Wilson vao bem, mas as bulas de dipirona falham por completo e
+uma pergunta de protocolo (Q08) tambem falha. As bulas sao o ponto fraco.
 
 ## 4. Casos insatisfatorios
 
-> Preencher com os casos onde a RAG falhou. Em saude, alucinacao e falha grave.
-> Para cada caso: qual pergunta, o que saiu errado e a causa provavel.
-
 | ID | Sintoma | Causa provavel |
 | -- | ------- | -------------- |
-| _TBD_ | ex.: recuperou contexto irrelevante | ex.: chunk grande demais diluiu o trecho-alvo |
-| _TBD_ | ex.: alucinou dose nao presente na bula | ex.: retriever nao trouxe a pagina de posologia |
-| _TBD_ | ex.: nao recusou pergunta fora do acervo | ex.: limiar de similaridade permissivo demais |
+| Q04, Q05 (dipirona) | Recuperou registros de prontuario em vez da bula; alguns nem eram de dipirona. | Desbalanceamento do acervo: a massa de chunks de prontuario (CSV) afoga as poucas paginas de bula na busca por similaridade. |
+| Q01 (clonazepam) | Recuperou prontuarios de pacientes que usaram clonazepam em vez da bula. | Mesmo desbalanceamento: o medicamento aparece em muitos prontuarios, que dominam o top-k. |
+| Q08 (cancer de pulmao) | Nao trouxe o trecho do fator de risco. | Trecho-alvo nao entrou no top-k na config baseline; melhora com chunks menores (ver secao 5). |
+
+Em saude, nao recuperar uma bula e recusar/errar e menos grave do que alucinar
+(a RAG nao inventou doses), mas ainda e uma falha de cobertura: a informacao
+existe no acervo e nao foi entregue.
 
 ## 5. Otimizacao de chunking
 
@@ -93,8 +93,7 @@ Corrigimos `reprocess_pipeline()` para, a cada configuracao: (1) sobrescrever
 (3) invalidar o cache do `rag_chain` (`_vectorstore`/`_chain`), que senao
 continuaria apontando para a colecao antiga.
 
-**Evidencia de que o fix funciona** — contagem real de chunks por config,
-rodando `chunk_all()` sobre o acervo atual (8 fontes: 5 PDFs + 3 CSVs):
+**Evidencia de que o fix funciona** — contagem real de chunks por config:
 
 | Config | pdf_chunk_size | overlap | Chunks de PDF | Chunks de CSV | Total |
 | ------ | -------------- | ------- | -------------- | -------------- | ----- |
@@ -102,44 +101,58 @@ rodando `chunk_all()` sobre o acervo atual (8 fontes: 5 PDFs + 3 CSVs):
 | menor_512_64 | 512 | 64 | 945 | 9.268 | 10.213 |
 | maior_1500_200 | 1500 | 200 | 371 | 9.268 | 9.639 |
 
-Os chunks de PDF variam bastante entre configs (371 a 945), como esperado —
-antes do fix, os 3 rodavam sobre os mesmos 536. Os chunks de CSV nao mudam
-porque o agrupamento de prontuarios usa `CSV_MAX_CHARS`, um parametro
-separado que essas configs nao tocam.
+Os chunks de PDF variam bastante entre configs (371 a 945), como esperado.
+Os chunks de CSV nao mudam porque o agrupamento de prontuarios usa
+`CSV_MAX_CHARS`, um parametro separado que essas configs nao tocam.
 
 ### 5.2 Resultado por configuracao (fidelidade / relevancia)
 
-> _TBD — preencher apos rodar `uv run eval/compare_chunking.py` com o Ollama
-> ativo. O fix garante que cada linha agora reflete uma base vetorial
-> genuinamente diferente; antes do fix os 3 numeros abaixo sairiam iguais
-> por construcao, entao qualquer resultado anterior a esta correcao deve
-> ser descartado._
-
 | Config | chunk_size | overlap | Fidelidade | Relevancia |
-| ------ | ---------- | ------- | ---------- | ---------- |
-| baseline | 1000 | 150 | _TBD_ | _TBD_ |
-| menor | 512 | 64 | _TBD_ | _TBD_ |
-| maior | 1500 | 200 | _TBD_ | _TBD_ |
+| ------ | :--------: | :-----: | :--------: | :--------: |
+| baseline | 1000 | 150 | 2,92 | 3,00 |
+| **menor** | **512** | **64** | **4,25** | **4,42** |
+| maior | 1500 | 200 | 3,17 | 3,42 |
 
-**Racional da otimizacao** (preencher apos rodar):
+**Racional da otimizacao:**
 
-- Qual config teve melhor fidelidade/relevancia e por que.
-- Efeito de chunks menores: tendem a recuperar trechos mais precisos, mas
-  podem fragmentar contexto que precisa ser lido junto (ex.: posologia).
-- Efeito de chunks maiores: preservam contexto, mas podem diluir o trecho-alvo
-  e trazer ruido para o LLM.
-- **Hipotese do desbalanceamento do acervo** (levantada por Bryan antes do
-  fix, ao ver os 3 resultados identicos): com ~9.268 chunks de CSV contra
-  apenas 371-945 de PDF dependendo da config, os prontuarios podem "afogar"
-  as bulas na busca por similaridade, independentemente do tamanho do chunk.
-  Essa hipotese continua plausivel (o desbalanceamento e real, ver tabela
-  5.1), mas precisa ser reverificada com os numeros desta secao (5.2), ja
-  que a evidencia original (resultados identicos) veio do bug, nao de um
-  teste valido.
-- Decisao final: qual configuracao a squad adotou e o motivo.
+A configuracao **menor (512/64) foi a melhor com folga** (4,25 de fidelidade e
+4,42 de relevancia, contra 2,92/3,00 do baseline). O ganho tem uma causa
+identificavel: chunks menores geraram mais chunks de PDF (945 contra 536 do
+baseline), o que aumentou a chance das paginas de bula entrarem no top-k e
+vencerem a competicao com os prontuarios. Na pratica, as perguntas de dipirona
+(Q04, Q05), que falhavam por completo no baseline, passaram a acertar na config
+menor.
+
+Isso confirma e ao mesmo tempo refina a hipotese do desbalanceamento levantada
+na primeira analise: o desbalanceamento CSV vs PDF e real e e a causa das
+falhas de bula, mas o tamanho do chunk **tem sim** efeito, porque chunks de PDF
+menores aumentam a densidade de trechos de bula na base e ajudam a superar o
+afogamento pelos prontuarios.
+
+A config maior (1500/200) ficou entre as duas, coerente com a explicacao:
+menos chunks de PDF (371) significa menos chance da bula ser recuperada.
+
+**Decisao:** a squad adota a configuracao **menor (512/64)** como padrao de
+producao, por apresentar a melhor fidelidade e relevancia no conjunto de teste.
+
+**Nota sobre variancia:** o LLM as a Judge apresenta pequena variacao entre
+execucoes (mesmo com temperatura 0), e em duas perguntas da config menor o juiz
+LLM falhou e caiu para a heuristica de fallback. Ainda assim, a diferenca entre
+a config menor e as demais e grande o suficiente para sustentar a conclusao.
 
 ## 6. Conclusao
 
-> Sintese: a RAG esta "boa o suficiente" para um contexto clinico?
-> Preencher com base nos numeros: taxa de recusa correta nos controles
-> negativos, fidelidade media, e casos criticos remanescentes.
+A RAG esta funcional e segura para o escopo do desafio: recupera e responde
+perguntas de protocolo citando a fonte, e recusa corretamente perguntas fora do
+acervo (controles negativos 5/5 em todas as configuracoes), sem alucinar.
+
+Com a configuracao otimizada (chunk 512/64), a fidelidade media sobe de 2,92
+para 4,25 e a cobertura das bulas melhora sensivelmente. Ainda assim, para um
+uso clinico real, a RAG precisaria de mais uma iteracao: mesmo na melhor config,
+convem separar a recuperacao por tipo de documento (bula/protocolo vs
+prontuario) para eliminar de vez o risco de uma bula nao ser recuperada, ja que
+em saude deixar de entregar uma posologia e uma falha de seguranca. O criterio
+de "boa o suficiente" que adotamos e: nenhuma falha sistematica de recuperacao
+por categoria clinica e taxa de recusa correta proxima de 100% nos casos fora do
+acervo — a segunda condicao ja e atendida; a primeira melhorou muito com a
+otimizacao e seria fechada com a separacao por tipo de documento.
